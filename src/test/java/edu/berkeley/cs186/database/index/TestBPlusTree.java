@@ -1,34 +1,33 @@
 package edu.berkeley.cs186.database.index;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Optional;
-import java.util.Random;
-import java.util.function.Supplier;
-
 import edu.berkeley.cs186.database.TimeoutScaling;
+import edu.berkeley.cs186.database.categories.Proj2Tests;
+import edu.berkeley.cs186.database.categories.PublicTests;
+import edu.berkeley.cs186.database.categories.SystemTests;
+import edu.berkeley.cs186.database.common.Pair;
 import edu.berkeley.cs186.database.concurrency.DummyLockContext;
 import edu.berkeley.cs186.database.concurrency.LockContext;
+import edu.berkeley.cs186.database.databox.DataBox;
+import edu.berkeley.cs186.database.databox.IntDataBox;
+import edu.berkeley.cs186.database.databox.Type;
 import edu.berkeley.cs186.database.io.DiskSpaceManager;
 import edu.berkeley.cs186.database.io.MemoryDiskSpaceManager;
 import edu.berkeley.cs186.database.memory.BufferManager;
 import edu.berkeley.cs186.database.memory.BufferManagerImpl;
 import edu.berkeley.cs186.database.memory.ClockEvictionPolicy;
 import edu.berkeley.cs186.database.recovery.DummyRecoveryManager;
-import org.junit.*;
+import edu.berkeley.cs186.database.table.RecordId;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.DisableOnDebug;
 import org.junit.rules.TestRule;
 import org.junit.rules.Timeout;
 
-import edu.berkeley.cs186.database.categories.*;
-import edu.berkeley.cs186.database.common.Pair;
-import edu.berkeley.cs186.database.databox.DataBox;
-import edu.berkeley.cs186.database.databox.IntDataBox;
-import edu.berkeley.cs186.database.databox.Type;
-import edu.berkeley.cs186.database.table.RecordId;
+import java.util.*;
+import java.util.function.Supplier;
 
 import static org.junit.Assert.*;
 
@@ -243,6 +242,17 @@ public class TestBPlusTree {
         m = String.format("(%s 6 %s)", ml, mr);
         r = String.format("(%s 8 %s)", rl, rr);
         assertEquals(String.format("(%s 4 %s 7 %s)", l, m, r), tree.toSexp());
+
+        assertEquals(Optional.of(new RecordId(1, (short) 1)), tree.get(new IntDataBox(1)));
+        assertEquals(Optional.of(new RecordId(2, (short) 2)), tree.get(new IntDataBox(2)));
+        assertEquals(Optional.of(new RecordId(3, (short) 3)), tree.get(new IntDataBox(3)));
+        assertEquals(Optional.of(new RecordId(4, (short) 4)), tree.get(new IntDataBox(4)));
+        assertEquals(Optional.of(new RecordId(5, (short) 5)), tree.get(new IntDataBox(5)));
+        assertEquals(Optional.of(new RecordId(6, (short) 6)), tree.get(new IntDataBox(6)));
+        assertEquals(Optional.of(new RecordId(7, (short) 7)), tree.get(new IntDataBox(7)));
+        assertEquals(Optional.of(new RecordId(8, (short) 8)), tree.get(new IntDataBox(8)));
+        assertEquals(Optional.of(new RecordId(9, (short) 9)), tree.get(new IntDataBox(9)));
+        assertEquals(Optional.empty(), tree.get(new IntDataBox(10)));
 
         //            (4 7)
         //           /  |  \
@@ -467,5 +477,22 @@ public class TestBPlusTree {
         assertEquals(3, LeafNode.maxOrder(pageSizeInBytes, keySchema));
         assertEquals(3, InnerNode.maxOrder(pageSizeInBytes, keySchema));
         assertEquals(3, BPlusTree.maxOrder(pageSizeInBytes, keySchema));
+    }
+
+    @Test
+    public void testScanAll() {
+        BPlusTreeMetadata bPlusTreeMetadata = new BPlusTreeMetadata("test", "col", Type.intType(), 2,
+                0, DiskSpaceManager.INVALID_PAGE_NUM, -1);
+        BPlusTree tree = new BPlusTree(bufferManager, bPlusTreeMetadata, treeContext);
+        tree.put(new IntDataBox(2), new RecordId(2, (short) 2));
+        tree.put(new IntDataBox(5), new RecordId(5, (short) 5));
+        tree.put(new IntDataBox(4), new RecordId(4, (short) 4));
+        tree.put(new IntDataBox(1), new RecordId(1, (short) 1));
+        tree.put(new IntDataBox(3), new RecordId(3, (short) 3));
+//        Iterator<RecordId> recordIdIterator = tree.scanAll();
+        Iterator<RecordId> recordIdIterator = tree.scanGreaterEqual(new IntDataBox(5));
+        List<RecordId> recordIds = new ArrayList<>();
+        recordIdIterator.forEachRemaining(recordIds::add);;
+        System.out.println();
     }
 }
