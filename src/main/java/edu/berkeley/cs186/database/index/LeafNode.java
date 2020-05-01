@@ -167,7 +167,6 @@ class LeafNode extends BPlusNode {
         sortKeyAndRids(pairs);
         int order = metadata.getOrder();
         if (pairs.size() > 2 * order) { // overflow
-//            System.out.println("leaf node is full with size : " + keys.size());
             List<DataBox> keysInOldLeaf = new ArrayList<>(order);
             List<RecordId> ridsInOldLeaf = new ArrayList<>(order);
             List<DataBox> keysInNewLeaf = new ArrayList<>(order + 1);

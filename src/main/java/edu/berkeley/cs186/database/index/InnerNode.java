@@ -361,11 +361,6 @@ class InnerNode extends BPlusNode {
         return Optional.empty();
     }
 
-    public static void main(String[] args) {
-        System.out.println((int) Math.ceil(2 * 4 * 0.33));
-        System.out.println(0 % 7);
-    }
-
     // See BPlusNode.remove.
     @Override
     public void remove(DataBox key) {
