@@ -39,6 +39,19 @@ public class TestUtils {
         return new Schema(fieldNames, dataBoxes);
     }
 
+    public static Schema createSchemaWithTwoInts(String int1, String int2) {
+        List<Type> dataBoxes = new ArrayList<Type>();
+        List<String> fieldNames = new ArrayList<String>();
+
+        dataBoxes.add(Type.intType());
+        dataBoxes.add(Type.intType());
+
+        fieldNames.add(int1);
+        fieldNames.add(int2);
+
+        return new Schema(fieldNames, dataBoxes);
+    }
+
     public static Schema createSchemaOfBool() {
         List<Type> dataBoxes = new ArrayList<Type>();
         List<String> fieldNames = new ArrayList<String>();
@@ -67,6 +80,13 @@ public class TestUtils {
         return new Schema(names, types);
     }
 
+    public static Schema createSchemaOfSidAndSname(int len) {
+        List<String> names = Arrays.asList("sid", "sname");
+        List<Type> types = Arrays.asList(Type.intType(),
+                Type.stringType(len));
+        return new Schema(names, types);
+    }
+
     public static Schema createSchemaOfInt() {
         List<String> names = Arrays.asList("int");
         List<Type> types = Arrays.asList(Type.intType());
@@ -85,6 +105,22 @@ public class TestUtils {
         dataValues.add(new IntDataBox(1));
         dataValues.add(new StringDataBox("a", 1));
         dataValues.add(new FloatDataBox((float) 1.2));
+
+        return new Record(dataValues);
+    }
+
+    public static Record createRecordWithIntAndString(int sid, String sname) {
+        List<DataBox> dataValues = new ArrayList<DataBox>();
+        dataValues.add(new IntDataBox(sid));
+        dataValues.add(new StringDataBox(sname, sname.length()));
+
+        return new Record(dataValues);
+    }
+
+    public static Record createRecordWithTwoInt(int sid, int bid) {
+        List<DataBox> dataValues = new ArrayList<DataBox>();
+        dataValues.add(new IntDataBox(sid));
+        dataValues.add(new IntDataBox(bid));
 
         return new Record(dataValues);
     }

@@ -36,17 +36,17 @@ class BNLJOperator extends JoinOperator {
         int numLeftPages = getLeftSource().getStats().getNumPages();
         int numRightPages = getRightSource().getStats().getNumPages();
         return ((int) Math.ceil((double) numLeftPages / (double) usableBuffers)) * numRightPages +
-               numLeftPages;
+                numLeftPages;
     }
 
     /**
      * BNLJ: Block Nested Loop Join
-     *  See lecture slides.
-     *
+     * See lecture slides.
+     * <p>
      * An implementation of Iterator that provides an iterator interface for this operator.
-     *
+     * <p>
      * Word of advice: try to decompose the problem into distinguishable sub-problems.
-     *    This means you'll probably want to add more methods than those given.
+     * This means you'll probably want to add more methods than those given.
      */
     private class BNLJIterator extends JoinIterator {
         // Iterator over pages of the left relation
@@ -61,6 +61,9 @@ class BNLJOperator extends JoinOperator {
         private Record leftRecord = null;
         // The next record to return
         private Record nextRecord = null;
+        private int matchesCount = 0;
+        private int leftRecordCount = 0;
+        private int rightRecordCount = 0;
 
         private BNLJIterator() {
             super();
@@ -83,24 +86,49 @@ class BNLJOperator extends JoinOperator {
          * Fetch the next non-empty block of B - 2 pages from the left relation. leftRecordIterator
          * should be set to a record iterator over the next B - 2 pages of the left relation that
          * have a record in them, and leftRecord should be set to the first record in this block.
-         *
+         * <p>
          * If there are no more pages in the left relation with records, both leftRecordIterator
          * and leftRecord should be set to null.
          */
         private void fetchNextLeftBlock() {
             // TODO(proj3_part1): implement
+            leftRecordCount = 0;
+            int maxPageFetchCount = numBuffers - 2;
+            if (leftIterator.hasNext()) {
+                leftRecordIterator = BNLJOperator.this.getBlockIterator(this.getLeftTableName(), leftIterator, maxPageFetchCount);
+                if (leftRecordIterator.hasNext()) {
+                    leftRecordIterator.markNext();
+                    leftRecord = leftRecordIterator.next();
+                    leftRecordCount++;
+                }
+            } else {
+                leftIterator = null;
+                leftRecord = null;
+            }
         }
 
         /**
          * Fetch the next non-empty page from the right relation. rightRecordIterator
          * should be set to a record iterator over the next page of the right relation that
          * has a record in it.
-         *
+         * <p>
          * If there are no more pages in the left relation with records, rightRecordIterator
          * should be set to null.
          */
         private void fetchNextRightPage() {
             // TODO(proj3_part1): implement
+            if (leftRecord == null) {
+                rightRecordIterator = null;
+                return;
+            }
+            if (rightIterator.hasNext()) {
+                rightRecordIterator = BNLJOperator.this.getBlockIterator(this.getRightTableName(), rightIterator, 1);
+                rightRecordIterator.markNext();
+            }
+        }
+
+        private void resetRightIterator() {
+            this.rightIterator = BNLJOperator.this.getPageIterator(this.getRightTableName());
         }
 
         /**
@@ -111,12 +139,59 @@ class BNLJOperator extends JoinOperator {
          */
         private void fetchNextRecord() {
             // TODO(proj3_part1): implement
+            if (leftRecord == null && leftIterator == null) throw new NoSuchElementException();
+            nextRecord = null;
+            while (!hasNext()) {
+                if (this.leftRecord != null) {
+                    Record rightRecord = this.rightRecordIterator.next(); // fetch next right record
+                    rightRecordCount++;
+                    if (leftRecord.equals(rightRecord)) {
+                        this.nextRecord = joinRecords(leftRecord, rightRecord);
+                        matchesCount++;
+                    }
+                }
+                // rightRecordIterator has more tuples, so continue match them with leftRecord
+                if (this.rightRecordIterator.hasNext()) {
+                    continue;
+                }
+
+                // rightRecordIterator is exhausted and leftRecordIterator has more tuples.
+                // So fetch next leftRecord and start matching from start of rightRecordIterator
+                if (!this.rightRecordIterator.hasNext() && this.leftRecordIterator.hasNext()) {
+                    this.leftRecord = this.leftRecordIterator.next();
+                    leftRecordCount++;
+                    this.rightRecordIterator.reset();
+                    continue;
+                }
+
+                // rightRecordIterator and leftRecordIterator are exhausted but there are more pages for rightIterator
+                if (!leftRecordIterator.hasNext() && !rightRecordIterator.hasNext() && rightIterator.hasNext()) {
+                    fetchNextRightPage();
+                    this.leftRecordIterator.reset();
+                    this.leftRecordIterator.markNext();
+                    this.leftRecord = leftRecordIterator.hasNext() ? leftRecordIterator.next() : null;
+                    continue;
+                }
+
+                // rightRecordIterator, leftRecordIterator and rightIterator are exhausted but there are more pages in leftIterator
+                if (!leftRecordIterator.hasNext() && !rightRecordIterator.hasNext() && !rightIterator.hasNext() && leftIterator.hasNext()) {
+                    fetchNextLeftBlock();
+                    resetRightIterator();
+                    fetchNextRightPage();
+                    continue;
+                }
+
+                if (!leftRecordIterator.hasNext() && !rightRecordIterator.hasNext() && !rightIterator.hasNext() && !leftIterator.hasNext()) {
+                    break;
+                }
+            }
         }
 
         /**
          * Helper method to create a joined record from a record of the left relation
          * and a record of the right relation.
-         * @param leftRecord Record from the left relation
+         *
+         * @param leftRecord  Record from the left relation
          * @param rightRecord Record from the right relation
          * @return joined record
          */
@@ -146,6 +221,9 @@ class BNLJOperator extends JoinOperator {
         @Override
         public Record next() {
             if (!this.hasNext()) {
+                System.out.println("total matches : " + matchesCount);
+                System.out.println("left record count : " + leftRecordCount);
+                System.out.println("right record matches : " + rightRecordCount);
                 throw new NoSuchElementException();
             }
 
@@ -153,6 +231,9 @@ class BNLJOperator extends JoinOperator {
             try {
                 this.fetchNextRecord();
             } catch (NoSuchElementException e) {
+                System.out.println("total matches : " + matchesCount);
+                System.out.println("left record count : " + leftRecordCount);
+                System.out.println("right record matches : " + rightRecordCount);
                 this.nextRecord = null;
             }
             return nextRecord;

@@ -8,6 +8,7 @@ import edu.berkeley.cs186.database.table.Record;
 import edu.berkeley.cs186.database.table.Schema;
 import edu.berkeley.cs186.database.common.Pair;
 import edu.berkeley.cs186.database.memory.Page;
+import edu.berkeley.cs186.database.table.Table;
 
 import java.util.*;
 
@@ -42,12 +43,14 @@ public class SortOperator {
     public interface Run extends Iterable<Record> {
         /**
          * Add a record to the run.
+         *
          * @param values set of values of the record to add to run
          */
         void addRecord(List<DataBox> values);
 
         /**
          * Add a list of records to the run.
+         *
          * @param records records to add to the run
          */
         void addRecords(List<Record> records);
@@ -57,6 +60,7 @@ public class SortOperator {
 
         /**
          * Table name of table backing the run.
+         *
          * @return table name
          */
         String tableName();
@@ -72,8 +76,16 @@ public class SortOperator {
      */
     public Run sortRun(Run run) {
         // TODO(proj3_part1): implement
+        List<Record> records = new ArrayList<>();
+        for (Record record : run) {
+            records.add(record);
+        }
+        records.sort(comparator);
 
-        return null;
+        Run runToReturn = createRun();
+        runToReturn.addRecords(records);
+
+        return runToReturn;
     }
 
     /**
@@ -86,8 +98,27 @@ public class SortOperator {
      */
     public Run mergeSortedRuns(List<Run> runs) {
         // TODO(proj3_part1): implement
+        PriorityQueue<Pair<Record, Integer>> PQ = new PriorityQueue<>(numBuffers, new RecordPairComparator());
+        List<Iterator<Record>> iterators = new ArrayList<>();
+        for (int i = 0; i < runs.size(); i++) {
+            Iterator<Record> iterator = runs.get(i).iterator();
+            iterators.add(iterator);
+            if (iterator.hasNext()) {
+                PQ.add(new Pair<>(iterator.next(), i));
+            }
+        }
 
-        return null;
+        Run run = createRun();
+        while (!PQ.isEmpty()) {
+            Pair<Record, Integer> poll = PQ.poll();
+            run.addRecord(poll.getFirst().getValues());
+            Iterator<Record> iterator = iterators.get(poll.getSecond());
+            if (iterator.hasNext()) {
+                PQ.add(new Pair<>(iterator.next(), poll.getSecond()));
+            }
+        }
+
+        return run;
     }
 
     /**
@@ -99,8 +130,26 @@ public class SortOperator {
      */
     public List<Run> mergePass(List<Run> runs) {
         // TODO(proj3_part1): implement
+        int numOfPassesNeeded = (int) Math.ceil(Math.log((double) runs.size() / numBuffers) / Math.log(numBuffers - 1));
 
-        return Collections.emptyList();
+        List<Run> sortedMergedIntermediateRuns = new ArrayList<>();
+        for (int i = 0; i < numOfPassesNeeded; i++) {
+            List<Run> intermediateRuns = new ArrayList<>();
+            for (Run run : runs) {
+                intermediateRuns.add(run);
+                if (intermediateRuns.size() % (numBuffers - 1) == 0) {
+                    sortedMergedIntermediateRuns.add(mergeSortedRuns(intermediateRuns));
+                    intermediateRuns = new ArrayList<>();
+                }
+            }
+            if (!intermediateRuns.isEmpty()) {
+                sortedMergedIntermediateRuns.add(mergeSortedRuns(intermediateRuns));
+            }
+            runs = sortedMergedIntermediateRuns;
+            sortedMergedIntermediateRuns = new ArrayList<>();
+        }
+
+        return runs;
     }
 
     /**
@@ -110,8 +159,55 @@ public class SortOperator {
      */
     public String sort() {
         // TODO(proj3_part1): implement
+        // 16 IO
+        Table table = this.transaction.getTable(this.tableName);
+        int B = numBuffers * this.transaction.getNumEntriesPerPage(this.tableName);
 
-        return this.tableName; // TODO(proj3_part1): replace this!
+        List<Run> pass0Runs = new ArrayList<>();
+        BacktrackingIterator<Record> recordIterator = table.iterator(); // 2 IO --> 18
+        Run run = null;
+        while (recordIterator.hasNext()) {
+            int i = 1;
+            while (i <= B && recordIterator.hasNext()) {
+                if (run == null) run = new InmemoryRun(); // 2 IO --> 20
+                Record record = recordIterator.next();// 1 IO
+                run.addRecords(Collections.singletonList(record)); // 1 IO --> 21
+                i++;
+            }
+            if (run != null) pass0Runs.add(sortRun(run));
+            run = null;
+        }
+
+        List<Run> mergedSortedRuns = pass0Runs;
+        while (mergedSortedRuns.size() > 1) {
+            mergedSortedRuns = mergePass(mergedSortedRuns);
+        }
+
+        return mergedSortedRuns.get(0).tableName(); // TODO(proj3_part1): replace this!
+    }
+
+    private static class InmemoryRun implements Run {
+        private final List<Record> records = new ArrayList<>();
+
+        @Override
+        public void addRecord(List<DataBox> values) {
+
+        }
+
+        @Override
+        public void addRecords(List<Record> records) {
+            this.records.addAll(records);
+        }
+
+        @Override
+        public Iterator<Record> iterator() {
+            return records.iterator();
+        }
+
+        @Override
+        public String tableName() {
+            return null;
+        }
     }
 
     public Iterator<Record> iterator() {
@@ -124,6 +220,7 @@ public class SortOperator {
     /**
      * Creates a new run for intermediate steps of sorting. The created
      * run supports adding records.
+     *
      * @return a new, empty run
      */
     Run createRun() {
@@ -134,6 +231,7 @@ public class SortOperator {
      * Creates a run given a backtracking iterator of records. Record adding
      * is not supported, but creating this run will not incur any I/Os aside
      * from any I/Os incurred while reading from the given iterator.
+     *
      * @param records iterator of records
      * @return run backed by the iterator of records
      */
@@ -146,7 +244,7 @@ public class SortOperator {
 
         IntermediateRun() {
             this.tempTableName = SortOperator.this.transaction.createTempTable(
-                                     SortOperator.this.operatorSchema);
+                    SortOperator.this.operatorSchema);
         }
 
         @Override
