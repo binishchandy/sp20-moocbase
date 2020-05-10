@@ -221,9 +221,6 @@ class BNLJOperator extends JoinOperator {
         @Override
         public Record next() {
             if (!this.hasNext()) {
-                System.out.println("total matches : " + matchesCount);
-                System.out.println("left record count : " + leftRecordCount);
-                System.out.println("right record matches : " + rightRecordCount);
                 throw new NoSuchElementException();
             }
 
@@ -231,9 +228,6 @@ class BNLJOperator extends JoinOperator {
             try {
                 this.fetchNextRecord();
             } catch (NoSuchElementException e) {
-                System.out.println("total matches : " + matchesCount);
-                System.out.println("left record count : " + leftRecordCount);
-                System.out.println("right record matches : " + rightRecordCount);
                 this.nextRecord = null;
             }
             return nextRecord;
