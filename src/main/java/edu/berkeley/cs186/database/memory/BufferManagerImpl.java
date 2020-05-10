@@ -546,7 +546,6 @@ public class BufferManagerImpl implements BufferManager {
 
     private void incrementIOs() {
         ++numIOs;
-        System.out.println("IO : " + numIOs);
     }
 
     /**
