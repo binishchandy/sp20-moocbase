@@ -265,8 +265,17 @@ class LeafNode extends BPlusNode {
         // TODO(proj2): implement
         int index = -1;
         for (int i = 0; i < keys.size(); i++) {
-            if (keys.get(i).getInt() == key.getInt()) {
-                index = i;
+            switch (key.type().getTypeId()) {
+                case INT:
+                    if (keys.get(i).getInt() == key.getInt()) {
+                        index = i;
+                    }
+                    break;
+                case FLOAT:
+                    if (keys.get(i).getFloat() == key.getFloat()) {
+                        index = i;
+                    }
+                    break;
             }
         }
         if (index != -1) {
@@ -483,7 +492,6 @@ class LeafNode extends BPlusNode {
         }
 
         return new LeafNode(metadata, bufferManager, page, keys, rids, rightSibling, treeContext);
-//        return new LeafNode(metadata, bufferManager, keys, rids, rightSibling, treeContext);
     }
 
     // Builtins //////////////////////////////////////////////////////////////////

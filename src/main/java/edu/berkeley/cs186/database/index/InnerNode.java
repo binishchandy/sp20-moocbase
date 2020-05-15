@@ -99,6 +99,7 @@ class InnerNode extends BPlusNode {
                         }
                     }
                 }
+                break;
             case FLOAT:
                 for (int i = 0; i < keys.size(); i++) {
                     if (i == (keys.size() - 1)) {
@@ -115,6 +116,7 @@ class InnerNode extends BPlusNode {
                         }
                     }
                 }
+                break;
             case STRING:
                 for (int i = 0; i < keys.size(); i++) {
                     if (i == (keys.size() - 1)) {
@@ -131,6 +133,7 @@ class InnerNode extends BPlusNode {
                         }
                     }
                 }
+                break;
             case LONG:
                 for (int i = 0; i < keys.size(); i++) {
                     if (i == (keys.size() - 1)) {
@@ -189,21 +192,23 @@ class InnerNode extends BPlusNode {
         if ((keys.size() + 1) <= 2 * this.metadata.getOrder()) {
             switch (key.type().getTypeId()) {
                 case INT:
+                case FLOAT:
                     Pair<List<DataBox>, List<Long>> listListPair = intPutWithoutOverflow(pushedUpPair.get().getFirst(), pushedUpPair.get().getSecond());
                     this.keys = listListPair.getFirst();
                     this.children = listListPair.getSecond();
                     sync();
                     break;
+
             }
         } else {
+            key = pushedUpPair.get().getFirst();
+            List<DataBox> leftKeys = new ArrayList<>();
+            List<DataBox> rightKeys = new ArrayList<>();
+            List<Long> leftPointers = new ArrayList<>();
+            List<Long> rightPointers = new ArrayList<>();
+            int pos = -1;
             switch (key.type().getTypeId()) {
                 case INT:
-                    key = pushedUpPair.get().getFirst();
-                    List<DataBox> leftKeys = new ArrayList<>();
-                    List<DataBox> rightKeys = new ArrayList<>();
-                    List<Long> leftPointers = new ArrayList<>();
-                    List<Long> rightPointers = new ArrayList<>();
-                    int pos = -1;
                     for (int i = 0; i < keys.size(); i++) {
                         if (i == 0 && key.getInt() < keys.get(i).getInt()) {
                             pos = 0;
@@ -216,49 +221,64 @@ class InnerNode extends BPlusNode {
                             break;
                         }
                     }
-                    int maxIndexOfLeftKeys = 0;
-                    boolean isLeftInnerNode = false;
-                    if (pos < this.metadata.getOrder()) {
-                        maxIndexOfLeftKeys = this.metadata.getOrder() - 1;
-                        isLeftInnerNode = true;
-                    } else {
-                        maxIndexOfLeftKeys = this.metadata.getOrder();
-                    }
-                    for (int i = 0; i < maxIndexOfLeftKeys; i++) {
-                        if (i == maxIndexOfLeftKeys - 1) {
-                            leftKeys.add(keys.get(i));
-                            leftPointers.add(children.get(i));
-                            leftPointers.add(children.get(i + 1));
-                        } else {
-                            leftKeys.add(keys.get(i));
-                            leftPointers.add(children.get(i));
+                    break;
+                case FLOAT:
+                    for (int i = 0; i < keys.size(); i++) {
+                        if (i == 0 && key.getFloat() < keys.get(i).getFloat()) {
+                            pos = 0;
+                            break;
+                        } else if (i == keys.size() - 1 && key.getFloat() > keys.get(i).getFloat()) {
+                            pos = i + 1;
+                            break;
+                        } else if (key.getFloat() > keys.get(i).getFloat() && key.getFloat() < keys.get(i + 1).getFloat()) {
+                            pos = i + 1;
+                            break;
                         }
                     }
-                    for (int i = maxIndexOfLeftKeys; i < 2 * this.metadata.getOrder(); i++) {
-                        rightKeys.add(keys.get(i));
-                        rightPointers.add(children.get(i + 1));
-                    }
-                    if (isLeftInnerNode) {
-                        leftKeys.add(pos, key);
-                        leftPointers.add(pos + 1, pushedUpPair.get().getSecond());
-                    } else {
-                        int index = pos - leftKeys.size();
-                        rightKeys.add(index, key);
-                        rightPointers.add(index, pushedUpPair.get().getSecond());
-                    }
-                    this.keys = leftKeys;
-                    this.children = leftPointers;
-                    InnerNode leftInnerNode = this;
-                    sync();
-                    DataBox newRootKey = rightKeys.remove(0);
-                    InnerNode rightInnerNode = new InnerNode(this.metadata, this.bufferManager, rightKeys, rightPointers, this.treeContext);
-                    rightInnerNode.sync();
-                    InnerNode newRoot = new InnerNode(this.metadata, this.bufferManager, Collections.singletonList(newRootKey),
-                            Arrays.asList(leftInnerNode.getPage().getPageNum(), rightInnerNode.getPage().getPageNum()),
-                            treeContext);
-                    newRoot.sync();
-                    return Optional.of(new Pair<>(newRoot.keys.get(0), rightInnerNode.getPage().getPageNum()));
+                    break;
             }
+            int maxIndexOfLeftKeys = 0;
+            boolean isLeftInnerNode = false;
+            if (pos < this.metadata.getOrder()) {
+                maxIndexOfLeftKeys = this.metadata.getOrder() - 1;
+                isLeftInnerNode = true;
+            } else {
+                maxIndexOfLeftKeys = this.metadata.getOrder();
+            }
+            for (int i = 0; i < maxIndexOfLeftKeys; i++) {
+                if (i == maxIndexOfLeftKeys - 1) {
+                    leftKeys.add(keys.get(i));
+                    leftPointers.add(children.get(i));
+                    leftPointers.add(children.get(i + 1));
+                } else {
+                    leftKeys.add(keys.get(i));
+                    leftPointers.add(children.get(i));
+                }
+            }
+            for (int i = maxIndexOfLeftKeys; i < 2 * this.metadata.getOrder(); i++) {
+                rightKeys.add(keys.get(i));
+                rightPointers.add(children.get(i + 1));
+            }
+            if (isLeftInnerNode) {
+                leftKeys.add(pos, key);
+                leftPointers.add(pos + 1, pushedUpPair.get().getSecond());
+            } else {
+                int index = pos - leftKeys.size();
+                rightKeys.add(index, key);
+                rightPointers.add(index, pushedUpPair.get().getSecond());
+            }
+            this.keys = leftKeys;
+            this.children = leftPointers;
+            InnerNode leftInnerNode = this;
+            sync();
+            DataBox newRootKey = rightKeys.remove(0);
+            InnerNode rightInnerNode = new InnerNode(this.metadata, this.bufferManager, rightKeys, rightPointers, this.treeContext);
+            rightInnerNode.sync();
+            InnerNode newRoot = new InnerNode(this.metadata, this.bufferManager, Collections.singletonList(newRootKey),
+                    Arrays.asList(leftInnerNode.getPage().getPageNum(), rightInnerNode.getPage().getPageNum()),
+                    treeContext);
+            newRoot.sync();
+            return Optional.of(new Pair<>(newRoot.keys.get(0), rightInnerNode.getPage().getPageNum()));
         }
         return Optional.empty();
 
@@ -267,45 +287,90 @@ class InnerNode extends BPlusNode {
     private Pair<List<DataBox>, List<Long>> intPutWithoutOverflow(DataBox key, long pageNum) {
         List<DataBox> newKeys = new ArrayList<>(keys);
         List<Long> newChildren = new ArrayList<>(children);
-        for (int i = 0; i < keys.size(); i++) {
-            if (key.getInt() < keys.get(i).getInt()) {
-                newKeys.add(i, key);
-                newChildren.add(i + 1, pageNum);
+        switch (key.type().getTypeId()) {
+            case INT:
+                for (int i = 0; i < keys.size(); i++) {
+                    if (key.getInt() < keys.get(i).getInt()) {
+                        newKeys.add(i, key);
+                        newChildren.add(i + 1, pageNum);
+                        break;
+                    } else if (i < keys.size() - 1) {
+                        if ((key.getInt() >= keys.get(i).getInt()) && (key.getInt() < keys.get(i + 1).getInt())) {
+                            newKeys.add(i + 1, key);
+                            newChildren.add(i + 2, pageNum);
+                            break;
+                        }
+                    } else {
+                        if ((key.getInt() >= keys.get(i).getInt())) {
+                            newKeys.add(i + 1, key);
+                            newChildren.add(i + 2, pageNum);
+                            break;
+                        }
+                    }
+                }
                 break;
-            } else if (i < keys.size() - 1) {
-                if ((key.getInt() >= keys.get(i).getInt()) && (key.getInt() < keys.get(i + 1).getInt())) {
-                    newKeys.add(i + 1, key);
-                    newChildren.add(i + 2, pageNum);
-                    break;
+            case FLOAT:
+                for (int i = 0; i < keys.size(); i++) {
+                    if (key.getFloat() < keys.get(i).getFloat()) {
+                        newKeys.add(i, key);
+                        newChildren.add(i + 1, pageNum);
+                        break;
+                    } else if (i < keys.size() - 1) {
+                        if ((key.getFloat() >= keys.get(i).getFloat()) && (key.getFloat() < keys.get(i + 1).getFloat())) {
+                            newKeys.add(i + 1, key);
+                            newChildren.add(i + 2, pageNum);
+                            break;
+                        }
+                    } else {
+                        if ((key.getFloat() >= keys.get(i).getFloat())) {
+                            newKeys.add(i + 1, key);
+                            newChildren.add(i + 2, pageNum);
+                            break;
+                        }
+                    }
                 }
-            } else {
-                if ((key.getInt() >= keys.get(i).getInt())) {
-                    newKeys.add(i + 1, key);
-                    newChildren.add(i + 2, pageNum);
-                    break;
-                }
-            }
         }
         return new Pair<>(newKeys, newChildren);
     }
 
     private Optional<Pair<DataBox, Long>> findAndPutKey(DataBox key, RecordId rid) {
         Long targetPageNum = null;
-        for (int i = 0; i < keys.size(); i++) {
-            if (key.getInt() < keys.get(i).getInt()) {
-                targetPageNum = children.get(i);
+        switch (key.type().getTypeId()) {
+            case INT:
+                for (int i = 0; i < keys.size(); i++) {
+                    if (key.getInt() < keys.get(i).getInt()) {
+                        targetPageNum = children.get(i);
+                        break;
+                    } else if (i < keys.size() - 1) {
+                        if ((key.getInt() >= keys.get(i).getInt()) && (key.getInt() < keys.get(i + 1).getInt())) {
+                            targetPageNum = children.get(i + 1);
+                            break;
+                        }
+                    } else {
+                        if ((key.getInt() >= keys.get(i).getInt())) {
+                            targetPageNum = children.get(i + 1);
+                            break;
+                        }
+                    }
+                }
                 break;
-            } else if (i < keys.size() - 1) {
-                if ((key.getInt() >= keys.get(i).getInt()) && (key.getInt() < keys.get(i + 1).getInt())) {
-                    targetPageNum = children.get(i + 1);
-                    break;
+            case FLOAT:
+                for (int i = 0; i < keys.size(); i++) {
+                    if (key.getFloat() < keys.get(i).getFloat()) {
+                        targetPageNum = children.get(i);
+                        break;
+                    } else if (i < keys.size() - 1) {
+                        if ((key.getFloat() >= keys.get(i).getFloat()) && (key.getFloat() < keys.get(i + 1).getFloat())) {
+                            targetPageNum = children.get(i + 1);
+                            break;
+                        }
+                    } else {
+                        if ((key.getFloat() >= keys.get(i).getFloat())) {
+                            targetPageNum = children.get(i + 1);
+                            break;
+                        }
+                    }
                 }
-            } else {
-                if ((key.getInt() >= keys.get(i).getInt())) {
-                    targetPageNum = children.get(i + 1);
-                    break;
-                }
-            }
         }
         BPlusNode targetNode = BPlusNode.fromBytes(this.metadata, this.bufferManager, this.treeContext, targetPageNum);
         return targetNode.put(key, rid);
@@ -323,7 +388,7 @@ class InnerNode extends BPlusNode {
         if (boxLongPair.isPresent() && keys.size() <= maxNodeSize) { // no overflow
             keys.add(boxLongPair.get().getFirst());
             children.add(boxLongPair.get().getSecond());
-        } else if(boxLongPair.isPresent()) { // overflow
+        } else if (boxLongPair.isPresent()) { // overflow
             List<DataBox> leftKeys = new ArrayList<>();
             List<Long> leftPointers = new ArrayList<>();
             List<DataBox> rightKeys = new ArrayList<>();
@@ -380,6 +445,23 @@ class InnerNode extends BPlusNode {
                         if (key.getInt() < keys.get(i).getInt()) {
                             getLeafNode(key, i).remove(key);
                         } else if ((key.getInt() >= keys.get(i).getInt()) && (key.getInt() < keys.get(i + 1).getInt())) {
+                            getLeafNode(key, i + 1).remove(key);
+                        }
+                    }
+                }
+                break;
+            case FLOAT:
+                for (int i = 0; i < keys.size(); i++) {
+                    if (i == (keys.size() - 1)) {
+                        if (key.getFloat() < keys.get(i).getFloat()) {
+                            getLeafNode(key, i).remove(key);
+                        } else if ((key.getFloat() >= keys.get(i).getFloat())) {
+                            getLeafNode(key, i + 1).remove(key);
+                        }
+                    } else {
+                        if (key.getFloat() < keys.get(i).getFloat()) {
+                            getLeafNode(key, i).remove(key);
+                        } else if ((key.getFloat() >= keys.get(i).getFloat()) && (key.getFloat() < keys.get(i + 1).getFloat())) {
                             getLeafNode(key, i + 1).remove(key);
                         }
                     }
